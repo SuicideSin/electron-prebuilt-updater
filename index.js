@@ -1,5 +1,7 @@
 'use strict'
 
+require('dotenv-safe').load()
+
 const GitHubApi = require('github')
 const Promise = require('bluebird')
 const bodyParser = require('body-parser')

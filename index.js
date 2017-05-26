@@ -11,6 +11,7 @@ const fs = Promise.promisifyAll(require('fs'))
 const npm = require('npm')
 const path = require('path')
 const semver = require('semver')
+const got = require('got')
 
 const app = express()
 const github = new GitHubApi({

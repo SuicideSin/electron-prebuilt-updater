@@ -1,7 +1,5 @@
 'use strict'
 
-require('dotenv-safe').load()
-
 const GitHubApi = require('github')
 const Promise = require('bluebird')
 const bodyParser = require('body-parser')
@@ -11,7 +9,6 @@ const fs = Promise.promisifyAll(require('fs'))
 const npm = require('npm')
 const path = require('path')
 const semver = require('semver')
-const got = require('got')
 
 const app = express()
 const github = new GitHubApi({
@@ -49,15 +46,12 @@ app.post('/', function (req, res) {
     let draft = req.body.release.draft
     let prerelease = req.body.release.prerelease
     let npmrc = path.resolve(process.env.HOME, '.npmrc')
-    let tsdUrl, oldTsdSha
 
     if (draft) {
       return res.status(403).send('This service ignores draft releases')
     }
 
     github.authenticate({ type: 'oauth', token: token })
-
-    // Update `version` field in package.json
     getContentAsync({
       user: owner,
       repo: repo,
@@ -85,51 +79,6 @@ app.post('/', function (req, res) {
         throw err
       })
     })
-
-    // Get existing electron.d.ts (only because we needs its sha)
-    .then(function () {
-      return getContentAsync({
-        user: owner,
-        repo: repo,
-        path: 'electron.d.ts'
-      })
-      .catch(function (err) {
-        console.error('Failed to get remote file: electron.d.ts')
-        throw err
-      })
-    })
-
-    // Update electron.d.ts
-    .then(function (oldTsd) {
-      oldTsdSha = oldTsd.sha
-      tsdUrl = `https://github.com/electron/electron/releases/download/v${newVersion}/electron.d.ts`
-      return got(tsdUrl)
-        .catch(function (err) {
-          console.error(`Unable to download ${tsdUrl}; maybe this version predates electron.d.ts?`)
-          console.error(err)
-          return Promise.resolve(null)
-        })
-    })
-    .then(function (response) {
-      // Continue the promise chain if electron.d.ts wasn't found, considering
-      // backporting releases that may predate existence of electron.d.ts
-      if (!response) return Promise.resolve(true)
-
-      return updateFileAsync({
-        user: owner,
-        repo: repo,
-        path: 'electron.d.ts',
-        message: `Update electron.d.ts to v${newVersion}`,
-        content: new Buffer(response.body).toString('base64'),
-        sha: oldTsdSha
-      })
-      .catch(function (err) {
-        console.error('Failed to update remote file: electron.d.ts')
-        throw err
-      })
-    })
-
-    // Add publishing credentials to npmrc
     .then(function () {
       return fs.statAsync(npmrc)
     })
@@ -150,8 +99,6 @@ app.post('/', function (req, res) {
         })
       }
     })
-
-    // Publish to GitHub
     .then(function () {
       return createReleaseAsync({
         owner: owner,
@@ -166,8 +113,6 @@ app.post('/', function (req, res) {
         throw err
       })
     })
-
-    // Publish to npm
     .then(function (release) {
       var npmConfig = {}
       if (prerelease) npmConfig.tag = 'beta'
